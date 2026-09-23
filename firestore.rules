@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// Paste this into Firebase Console → Firestore Database → Rules.
+// Review before going live with real student data — this is a solid
+// starting point, not a guarantee of production-grade security.
+
+function isSignedIn() {
+  return request.auth != null;
+}
+
+function myRole() {
+  return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+}
+
+function isAdmin() {
+  return isSignedIn() && myRole() == 'admin';
+}
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // users/{uid} — one profile doc per account (admin, teacher, or student)
+    match /users/{userId} {
+      // Anyone signed in can read their own doc; admins can read/list all.
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+
+      // Only an admin creates new accounts (teacher/student onboarding).
+      allow create: if isAdmin();
+
+      // A user can update a few of their own fields (name/phone/bio);
+      // an admin can update anything (e.g. status, course, department).
+      allow update: if isAdmin() ||
+        (isSignedIn() && request.auth.uid == userId &&
+         request.resource.data.role == resource.data.role &&
+         request.resource.data.loginId == resource.data.loginId);
+
+      // No deletes from the client — suspend (status field) instead.
+      allow delete: if false;
+    }
+  }
+}
